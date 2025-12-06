@@ -65,19 +65,20 @@ def generate_dag( num_nodes=12, num_layers=4, edge_prob=0.25,seed=None):
     return G, layers
 
 
-if __name__ == "__main__":
-    G, layers = generate_dag()
-    print("\nGenerated  DAG:")
-    print("Layers:", layers)
-    print("Nodes:", list(G.nodes()))
-    print("Edges:")
-    for u, v in G.edges():
-        print(f"  {u} -> {v}")
+#if __name__ == "__main__":
+#    G, layers = generate_dag()
+#    print("\nGenerated  DAG:")
+#    print("Layers:", layers)
+#    print("Nodes:", list(G.nodes()))
+#    print("Edges:")
+#    for u, v in G.edges():
+#        print(f"  {u} -> {v}")
+#
+#    plt.figure(figsize=(6,5))
+#    pos = nx.spring_layout(G, seed=1)
+#    nx.draw(G)
+#    plt.title("FPGA-like DAG (2-terminal nets)")
+#    plt.show()
 
-    plt.figure(figsize=(6,5))
-    pos = nx.spring_layout(G, seed=1)
-    nx.draw(G)
-    plt.title("FPGA-like DAG (2-terminal nets)")
-    plt.show()
 
 
