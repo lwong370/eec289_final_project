@@ -102,6 +102,8 @@ if __name__ == "__main__":
 
     # Variable definition: micro-register mr[u,v,k] = 1 if the edge between vertex u and v cross stage boundary k
     mr = model.addVars(graph_edges, num_boundaries, vtype=GRB.BINARY, name="mr")
+    
+    # Variable definition: max capacity per stage
     mc = model.addVar(vtype=GRB.INTEGER, name="mc")
 
     # Constraint: Ensures each vertex is in only 1 stage
