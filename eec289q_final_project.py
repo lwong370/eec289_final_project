@@ -4,10 +4,11 @@ import argparse
 import gurobipy as gp
 import random
 import matplotlib.pyplot as plt
+from collections import deque
 
 from gurobipy import GRB
 from pathlib import Path
-
+from collections import deque
 
 def generate_dag( num_nodes=100, num_layers=10, edge_prob=0.25,seed=None):
     base_prob=0.05
@@ -70,23 +71,7 @@ def generate_dag( num_nodes=100, num_layers=10, edge_prob=0.25,seed=None):
     assert nx.is_directed_acyclic_graph(G)
     return G
 
-
-if __name__ == "__main__":
-
-    # Create model
-    model = gp.Model('fpga_partitioning')
-
-    # # User input to directory containing graphs
-    # parser = argparse.ArgumentParser(description="Process files in a directory.")
-    # parser.add_argument("directory", type=str, help="The path to the directory to process.")
-    # args = parser.parse_args()
-    # graph_dir = args.directory
-    # print(graph_dir)
-
-    num_stages = 8 # Number of stages used in paper
-
-    G = generate_dag()
-
+def run_ilp(G):
     node_count = G.number_of_nodes()
     num_boundaries = num_stages - 1
     edge_count = G.number_of_edges()
@@ -94,6 +79,9 @@ if __name__ == "__main__":
 
     epsilon = 0.05 
     avg_size = node_count / num_stages
+
+    # Create model
+    model = gp.Model('fpga_partitioning')
 
     # Variable definition: Creates a 2-dimensional variable x[v, s] = 1 if vertex v in stage s
     node_range = range(node_count)
@@ -138,10 +126,8 @@ if __name__ == "__main__":
     model.Params.TimeLimit = 120 # Set time limit to 2 minutes
     model.optimize()
 
-    # Print the Optimal Stage Assignment (Variable X) ---
+    # Print the Optimal Stage Assignment + Runtime
     print("Vertex | Optimal Stage")
-
-    # Prints variables of x[v, s] that equal 1, meaning vertex v is in stage s
     for v in node_range:
         for s in stage_range:
             # Checks if binary variable equals 1 (within a small tolerance)
@@ -152,4 +138,127 @@ if __name__ == "__main__":
 
     print(f"Runtime: {model.Runtime}")
     print(f"Total Minimum Micro-Registers (MRs): {model.objVal}")
+
+
+def calculate_critical_path_length(G):
+    cpl = {}    # critical path length
+    weight = 1  # Modeling a synthetic circuit where all logic blocks are treated identical
+    
+    # Find primary output nodes (which have out_degree = 0)
+    output_nodes = [v for v in G.nodes() if G.out_degree(v) == 0]
+
+    # Create adjacency list of reversed graph, ensures successor nodes processed first
+    reversed_adj = {v: [] for v in G.nodes()}
+    for u in G.nodes():
+        for v in G.successors(u):
+            reversed_adj[v].append(u)
+    
+    # Assign critical path length of output node to weight 
+    for v in output_nodes:
+        cpl[v] = weight
+
+    # Use a queue starting with the output nodes for backward traversal
+    q = deque(output_nodes)
+
+    # Count how many predecessors have had their CPL calculated
+    predecessor_count = {v: 0 for v in G.nodes()}
+    
+    while q:
+        v = q.popleft()
+
+        # For each predecessor 'u' of node v
+        for u in G.predecessors(v):
+            predecessor_count[u] += 1
+            
+            # Checks if all successors of node u have been processed 
+            if predecessor_count[u] == G.out_degree(u):
+                max_successor_cpl = 0
+                for successor_node in G.successors(u):  # Loop through all nodes that node u is connected to
+                    max_successor_cpl = max(max_successor_cpl, cpl.get(successor_node, 0)) 
+                cpl[u] = max_successor_cpl
+                q.append(u)
+
+    return cpl
+
+
+def run_list_scheduling(G, p):
+    stages = []
+    stage_of = {}
+    cur_stage = []
+    cur_used = 0
+    Mc = G.number_of_nodes()/p  # As specified in paper
+    
+    # Topologically order nodes in graph
+    priority_cpl = calculate_critical_path_length(G) 
+    
+    # Use CPL for priority
+    rank = lambda v: priority_cpl.get(v, 0)
+
+    # Setup successor and indegree structures
+    in_degree = {v: G.in_degree(v) for v in G.nodes()}
+    successors = {v: list(G.successors(v)) for v in G.nodes()}
+
+    # Create list of nodes with no incoming edges
+    ready = [v for v in G.nodes() if in_degree[v] == 0]
+    ready.sort(key=rank, reverse=True)
+
+    while ready:
+        v = ready.pop(0)
+        w = 1
+
+        # If it doesn't fit in current stage, start new one
+        if cur_used + w > Mc:
+            stages.append(cur_stage)
+            cur_stage = []
+            cur_used = 0
+
+        # assign
+        cur_stage.append(v)
+        cur_used += w
+        stage_of[v] = len(stages) + 1   # 1-based stage index
+
+        # update successors
+        for u in successors[v]:
+            in_degree[u] -= 1
+            if in_degree[u] == 0:
+                ready.append(u)
+
+        # maintain priority
+        ready.sort(key=rank, reverse=True)
+
+    # flush last stage
+    if cur_stage:
+        stages.append(cur_stage)
+    
+    print("Stages:", stages)
+    print("Stage of:", stage_of)
+
+    mr_count = 0
+    for u, v in G.edges():
+        if stage_of[u] != stage_of[v]:
+            mr_count += 1
+    print("MRs:", mr_count)
+
+
+if __name__ == "__main__":
+    # # User input to directory containing graphs
+    # parser = argparse.ArgumentParser(description="Process files in a directory.")
+    # parser.add_argument("directory", type=str, help="The path to the directory to process.")
+    # args = parser.parse_args()
+    # graph_dir = args.directory
+    # print(graph_dir)
+
+    num_stages = 8 # Number of stages used in paper
+
+    # Generate DAG
+    G = generate_dag()
+
+    # Run ILP Optimization
+    run_ilp(G)
+
+    # Run List Scheduling Heuristic
+    run_list_scheduling(G, num_stages)
+
+
+    
 
