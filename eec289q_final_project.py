@@ -4,8 +4,9 @@ import argparse
 import gurobipy as gp
 import random
 import matplotlib.pyplot as plt
-from collections import deque
+import csv
 
+from collections import deque
 from gurobipy import GRB
 from pathlib import Path
 from collections import deque
@@ -69,7 +70,7 @@ def generate_dag( num_nodes=100, num_layers=10, edge_prob=0.25,seed=None):
         G = generate_dag()
 
     assert nx.is_directed_acyclic_graph(G)
-    return G
+    return num_nodes, num_layers, G
 
 def run_ilp(G):
     node_count = G.number_of_nodes()
@@ -136,8 +137,7 @@ def run_ilp(G):
                 print(f"{node_label:<6} | {s}")
                 break 
 
-    print(f"Runtime: {model.Runtime}")
-    print(f"Total Minimum Micro-Registers (MRs): {model.objVal}")
+    return model.objVal
 
 
 def calculate_critical_path_length(G):
@@ -237,7 +237,8 @@ def run_list_scheduling(G, p):
     for u, v in G.edges():
         if stage_of[u] != stage_of[v]:
             mr_count += 1
-    print("MRs:", mr_count)
+    
+    return mr_count
 
 
 if __name__ == "__main__":
@@ -251,14 +252,24 @@ if __name__ == "__main__":
     num_stages = 8 # Number of stages used in paper
 
     # Generate DAG
-    G = generate_dag()
+    num_nodes, num_stages, G = generate_dag()
 
     # Run ILP Optimization
-    run_ilp(G)
+    ilp_mr = run_ilp(G)
+    print("# MRs from ILP:", ilp_mr)
 
     # Run List Scheduling Heuristic
-    run_list_scheduling(G, num_stages)
+    list_schedule_mr = run_list_scheduling(G, num_stages)
+    print("# MRs from List Scheduling:", list_schedule_mr)
 
-
+    # Save results
+    current_directory = os.getcwd()
+    data = [num_nodes, num_stages, ilp_mr, list_schedule_mr]
+    headers = ['Nodes','Depth','ILP MRs', 'List Scheduling MRs']
+    full_path = os.path.join(current_directory, 'results.csv')
+    with open(full_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(headers)  # Write the header row
+        writer.writerows([data])
     
 
