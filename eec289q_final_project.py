@@ -11,7 +11,7 @@ from gurobipy import GRB
 from pathlib import Path
 from collections import deque
 
-def generate_dag( num_nodes=100, num_layers=10, edge_prob=0.25,seed=None):
+def generate_dag( num_nodes=500, num_layers=50, edge_prob=0.25,seed=None):
     base_prob=0.05
     decay=0.3
     if seed is not None:
@@ -67,10 +67,10 @@ def generate_dag( num_nodes=100, num_layers=10, edge_prob=0.25,seed=None):
     # make sure the DAG is weakly connected
     if not nx.is_weakly_connected(G):
         # regenerate until connected
-        num_nodes, num_layers, G = generate_dag()
+        G = generate_dag()
 
     assert nx.is_directed_acyclic_graph(G)
-    return num_nodes, num_layers, G
+    return G
 
 def run_ilp(G):
     node_count = G.number_of_nodes()
@@ -78,7 +78,7 @@ def run_ilp(G):
     edge_count = G.number_of_edges()
     graph_edges = list(G.edges())
 
-    epsilon = 0.05 
+    epsilon = 0.10 
     avg_size = node_count / num_stages
 
     # Create model
@@ -124,7 +124,7 @@ def run_ilp(G):
     
     # Objective function: Minimize total MR's needed 
     model.setObjective(gp.quicksum(mr[u,v,k] for (u,v) in graph_edges for k in range(num_boundaries)), GRB.MINIMIZE)
-    model.Params.TimeLimit = 120 # Set time limit to 2 minutes
+    # model.Params.TimeLimit = 600 # Set time limit to 2 minutes
     model.optimize()
 
     # Print the Optimal Stage Assignment + Runtime
@@ -250,22 +250,25 @@ if __name__ == "__main__":
     # print(graph_dir)
 
     num_stages = 8 # Number of stages used in paper
+    num_of_nodes=500
+    num_of_layers=50
 
     # Generate DAG
-    num_nodes, num_stages, G = generate_dag()
-
-    # Run ILP Optimization
-    ilp_mr = run_ilp(G)
-    print("# MRs from ILP:", ilp_mr)
+    G = generate_dag(num_nodes=num_of_nodes, num_layers=num_of_layers)
 
     # Run List Scheduling Heuristic
     list_schedule_mr = run_list_scheduling(G, num_stages)
+    
+    # Run ILP Optimization
+    ilp_mr = run_ilp(G)
+
     print("# MRs from List Scheduling:", list_schedule_mr)
+    print("# MRs from ILP:", ilp_mr)
 
     # Save results
     current_directory = os.getcwd()
     
-    data = [num_nodes, num_stages, ilp_mr, list_schedule_mr]
+    data = [num_of_nodes, num_of_layers, ilp_mr, list_schedule_mr]
     headers = ['Nodes','Depth','ILP MRs', 'List Scheduling MRs']
     
     full_path = os.path.join(current_directory, 'results.csv')
