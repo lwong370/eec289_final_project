@@ -67,7 +67,7 @@ def generate_dag( num_nodes=100, num_layers=10, edge_prob=0.25,seed=None):
     # make sure the DAG is weakly connected
     if not nx.is_weakly_connected(G):
         # regenerate until connected
-        G = generate_dag()
+        num_nodes, num_layers, G = generate_dag()
 
     assert nx.is_directed_acyclic_graph(G)
     return num_nodes, num_layers, G
@@ -264,12 +264,16 @@ if __name__ == "__main__":
 
     # Save results
     current_directory = os.getcwd()
+    
     data = [num_nodes, num_stages, ilp_mr, list_schedule_mr]
     headers = ['Nodes','Depth','ILP MRs', 'List Scheduling MRs']
+    
     full_path = os.path.join(current_directory, 'results.csv')
-    with open(full_path, 'w', newline='') as csvfile:
+    file_exists = os.path.exists(full_path)
+    with open(full_path, 'a', newline='') as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(headers)  # Write the header row
+        if not file_exists:
+            writer.writerow(headers)
         writer.writerows([data])
     
 
